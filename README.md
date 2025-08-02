@@ -2,29 +2,133 @@
 
 This repository contains Infrastructure as Code (IaC) using Terragrunt for managing AWS resources following enterprise-grade best practices, including SOC2 and PCI-DSS compliance requirements.
 
-## Infrastructure Overview
+## 🎯 Key Features
+
+- **Multi-Environment Support**: Separate configurations for development, staging, and production
+- **Security-First Design**: Built-in compliance with SOC2 and PCI-DSS requirements
+- **Infrastructure as Code**: Version-controlled infrastructure using Terragrunt and Terraform
+- **Modular Architecture**: Reusable components across environments
+- **Automated Compliance**: Built-in security controls and monitoring
+- **Cost Optimization**: Environment-specific resource sizing
+- **High Availability**: Multi-AZ deployments for production workloads
+- **Disaster Recovery**: Automated backups and cross-region replication
+- **Infrastructure Testing**: Built-in test suite for infrastructure validation
+
+## 🗺️ Resource Map
+
+```mermaid
+graph TB
+    subgraph Multi-Environment Infrastructure
+        DEV[Development]
+        STAGING[Staging]
+        PROD[Production]
+    end
+
+    subgraph Network Layer
+        VPC[VPC] --> SUBNETS[Public & Private Subnets]
+        SUBNETS --> NGW[NAT Gateways]
+        SUBNETS --> IGW[Internet Gateway]
+        VPC --> FLOW[VPC Flow Logs]
+        SG[Security Groups] --> SUBNETS
+    end
+
+    subgraph Application Layer
+        EC2[EC2 Instances]
+        EBS[EBS Volumes]
+        ASG[Auto Scaling Groups]
+        SSM[Systems Manager]
+        
+        ASG --> EC2
+        EC2 --> EBS
+        SSM --> EC2
+    end
+
+    subgraph Data Layer
+        RDS[RDS PostgreSQL]
+        S3[S3 Buckets]
+        S3LOGS[S3 Logs]
+        
+        RDS --> S3LOGS
+        S3 --> S3LOGS
+    end
+
+    subgraph Security & Compliance
+        KMS[KMS Keys]
+        IAM[IAM Roles]
+        CW[CloudWatch]
+        BACKUP[AWS Backup]
+        
+        KMS --> RDS
+        KMS --> S3
+        KMS --> EBS
+        IAM --> EC2
+        CW --> EC2
+        CW --> RDS
+        BACKUP --> RDS
+        BACKUP --> EBS
+    end
+
+    DEV --> Network Layer
+    STAGING --> Network Layer
+    PROD --> Network Layer
 
 The infrastructure is organized by region and component type, following a modular approach:
 
+## 📊 Environment Configuration Matrix
+
+| Component | Development | Staging | Production |
+|-----------|------------|----------|------------|
+| **Network** |
+| VPC CIDR | 10.0.0.0/16 | 172.16.0.0/16 | 192.168.0.0/16 |
+| Availability Zones | 2 | 2 | 3 |
+| NAT Gateways | 1 | 2 | 3 |
+| VPC Flow Logs | Basic | Enhanced | Full |
+| **Compute** |
+| EC2 Instance Type | t3.micro | t3.medium | t3.large |
+| Auto Scaling Min | 1 | 2 | 3 |
+| Auto Scaling Max | 3 | 6 | 10 |
+| EBS Volume Type | gp3 | gp3 | io2 |
+| **Database** |
+| RDS Instance Class | db.t3.small | db.t3.large | db.r6g.xlarge |
+| Multi-AZ | No | Yes | Yes |
+| Backup Retention | 7 days | 14 days | 35 days |
+| Performance Insights | 7 days | 14 days | 731 days |
+| **Storage** |
+| S3 Versioning | Enabled | Enabled | Enabled |
+| S3 Lifecycle Rules | 30 days | 60 days | 90 days |
+| S3 Replication | No | No | Yes |
+| **Security** |
+| KMS Key Rotation | 365 days | 365 days | 90 days |
+| IAM Role Review | 90 days | 60 days | 30 days |
+| CloudWatch Retention | 30 days | 90 days | 365 days |
+| Backup Frequency | Daily | 12 hours | 6 hours |
+
+## 📁 Project Structure
+
 ```
-eu-west-2/
-├── _envcommon/          # Common environment configurations
-├── network/
-│   ├── vpc/            # VPC with public, private, and database subnets
-│   └── security_groups/ # Security groups with least privilege access
-├── compute/
-│   └── ec2/           # EC2 instances with monitoring and security
-├── database/
-│   └── rds/           # RDS PostgreSQL with encryption and HA
-├── storage/
-│   └── s3/            # S3 buckets with versioning and encryption
-└── root.hcl           # Root configuration and common settings
+terraform-katherine/
+├── account.hcl                # Account-level configurations
+├── env.hcl                    # Environment variables
+├── region.hcl                 # Region-specific settings
+├── terragrunt.hcl            # Root Terragrunt configuration
+├── _envcommon/               # Common environment configurations
+│   └── common.hcl           # Shared variables and settings
+├── modules/                  # Custom Terraform modules
+│   └── ec2/                 # EC2 instance module
+├── dev/                     # Development environment
+│   └── eu-west-2/          # Region-specific resources
+├── staging/                 # Staging environment
+│   └── eu-west-2/          # Region-specific resources
+├── prod/                    # Production environment
+│   └── eu-west-2/          # Region-specific resources
+└── test/                    # Infrastructure tests
+    └── infrastructure_test.go
 ```
 
 ## Prerequisites
 
 - Terraform v1.13.0
-- Terragrunt (latest version)
+- Terragrunt v0.84.0
 - AWS CLI configured with appropriate credentials
 - AWS Account ID exported as environment variable
 
