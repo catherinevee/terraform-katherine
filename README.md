@@ -71,8 +71,7 @@ graph TB
     DEV --> Network Layer
     STAGING --> Network Layer
     PROD --> Network Layer
-
-The infrastructure is organized by region and component type, following a modular approach:
+```
 
 ## 📊 Environment Configuration Matrix
 
@@ -111,18 +110,23 @@ terraform-katherine/
 ├── env.hcl                    # Environment variables
 ├── region.hcl                 # Region-specific settings
 ├── terragrunt.hcl            # Root Terragrunt configuration
-├── _envcommon/               # Common environment configurations
-│   └── common.hcl           # Shared variables and settings
-├── modules/                  # Custom Terraform modules
-│   └── ec2/                 # EC2 instance module
-├── dev/                     # Development environment
-│   └── eu-west-2/          # Region-specific resources
-├── staging/                 # Staging environment
-│   └── eu-west-2/          # Region-specific resources
-├── prod/                    # Production environment
-│   └── eu-west-2/          # Region-specific resources
-└── test/                    # Infrastructure tests
-    └── infrastructure_test.go
+└── eu-west-2/                # Resources for eu-west-2 region
+    ├── root.hcl              # Region-specific root configuration
+    ├── _envcommon/           # Common environment configurations
+    ├── network/              # Network resources
+    │   ├── vpc/             # VPC configurations
+    │   │   └── terragrunt.hcl
+    │   └── security_groups/ # Security group configurations
+    │       └── terragrunt.hcl
+    ├── database/            # Database resources
+    │   └── rds/            # RDS configurations
+    │       └── terragrunt.hcl
+    ├── compute/            # Compute resources
+    │   └── ec2/           # EC2 configurations
+    │       └── terragrunt.hcl
+    └── storage/           # Storage resources
+        └── s3/           # S3 configurations
+            └── terragrunt.hcl
 ```
 
 ## Prerequisites
@@ -136,7 +140,7 @@ terraform-katherine/
 
 - Terraform: 1.13.0
 - AWS Provider: 6.2.0
-- Terragrunt: Latest version
+- Terragrunt: 0.84.0
 
 ## Quick Start
 
@@ -251,28 +255,12 @@ This infrastructure implements controls for:
 - Comprehensive tagging strategy
 - Security by default
 
-## Folder Structure
+## Testing
 
+```bash
+cd test
+go test -v ./...
 ```
-terraform-katherine/
-├── README.md
-└── eu-west-2/
-    ├── root.hcl
-    ├── _envcommon/
-    ├── network/
-    │   ├── vpc/
-    │   │   └── terragrunt.hcl
-    │   └── security_groups/
-    │       └── terragrunt.hcl
-    ├── database/
-    │   └── rds/
-    │       └── terragrunt.hcl
-    ├── compute/
-    │   └── ec2/
-    │       └── terragrunt.hcl
-    └── storage/
-        └── s3/
-            └── terragrunt.hcl
 ```
 
 ## Contributing
