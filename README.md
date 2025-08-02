@@ -18,21 +18,28 @@ This repository contains Infrastructure as Code (IaC) using Terragrunt for manag
 
 ```mermaid
 graph TB
-    subgraph Multi-Environment Infrastructure
+    subgraph Environments[Multi-Environment Infrastructure]
         DEV[Development]
         STAGING[Staging]
         PROD[Production]
     end
 
-    subgraph Network Layer
-        VPC[VPC] --> SUBNETS[Public & Private Subnets]
-        SUBNETS --> NGW[NAT Gateways]
-        SUBNETS --> IGW[Internet Gateway]
-        VPC --> FLOW[VPC Flow Logs]
-        SG[Security Groups] --> SUBNETS
+    subgraph Network[Network Layer]
+        VPC[VPC]
+        SUBNETS[Public & Private Subnets]
+        NGW[NAT Gateways]
+        IGW[Internet Gateway]
+        FLOW[VPC Flow Logs]
+        SG[Security Groups]
+        
+        VPC --> SUBNETS
+        SUBNETS --> NGW
+        SUBNETS --> IGW
+        VPC --> FLOW
+        SG --> SUBNETS
     end
 
-    subgraph Application Layer
+    subgraph App[Application Layer]
         EC2[EC2 Instances]
         EBS[EBS Volumes]
         ASG[Auto Scaling Groups]
@@ -43,7 +50,7 @@ graph TB
         SSM --> EC2
     end
 
-    subgraph Data Layer
+    subgraph Data[Data Layer]
         RDS[RDS PostgreSQL]
         S3[S3 Buckets]
         S3LOGS[S3 Logs]
@@ -52,7 +59,7 @@ graph TB
         S3 --> S3LOGS
     end
 
-    subgraph Security & Compliance
+    subgraph Security[Security & Compliance]
         KMS[KMS Keys]
         IAM[IAM Roles]
         CW[CloudWatch]
@@ -68,9 +75,9 @@ graph TB
         BACKUP --> EBS
     end
 
-    DEV --> Network Layer
-    STAGING --> Network Layer
-    PROD --> Network Layer
+    DEV --> Network
+    STAGING --> Network
+    PROD --> Network
 ```
 
 ## 📊 Environment Configuration Matrix
