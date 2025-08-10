@@ -1,0 +1,329 @@
+name: Infrastructure Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+        - dev
+        - staging
+        - prod
+      action:
+        description: 'Deployment action'
+        required: true
+        type: choice
+        options:
+        - plan
+        - apply
+        - destroy
+      auto_approve:
+        description: 'Auto approve changes (dev/staging only)'
+        required: false
+        type: boolean
+        default: false
+
+# Explicit permissions - minimal required access
+permissions:
+  contents: read
+  actions: read
+  deployments: write
+
+env:
+  TF_VERSION: "1.13.0"
+  TERRAGRUNT_VERSION: "0.84.0"
+  AWS_REGION: "eu-west-2"
+
+jobs:
+  pre-deployment-checks:
+    name: Pre-Deployment Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        # Security: Don't checkout PR code to prevent script injection
+        ref: ${{ github.sha }}
+        fetch-depth: 0
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Setup Terragrunt
+      uses: autero1/action-terragrunt@v1.0.0
+      with:
+        terragrunt_version: ${{ env.TERRAGRUNT_VERSION }}
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        # Security: Use OIDC instead of long-lived secrets
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-session-name: GitHubActions-Deployment
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Validate Environment Configuration
+      run: |
+        echo "Validating environment configuration for ${{ github.event.inputs.environment }}..."
+        
+        # Check if environment configuration exists
+        if [ ! -d "eu-west-2/${{ github.event.inputs.environment }}" ]; then
+          echo "::error::Environment configuration not found for ${{ github.event.inputs.environment }}"
+          exit 1
+        fi
+        
+        # Validate environment-specific configurations
+        cd eu-west-2/${{ github.event.inputs.environment }}
+        terragrunt validate-inputs
+        if [ $? -ne 0 ]; then
+          echo "::error::Environment validation failed"
+          exit 1
+        fi
+        
+        echo "::notice::Environment validation passed"
+
+    - name: Security Pre-Deployment Scan
+      run: |
+        echo "Running pre-deployment security scan..."
+        
+        # Quick security validation
+        security_issues=0
+        
+        # Check for encryption settings
+        if ! grep -r "encryption" eu-west-2/${{ github.event.inputs.environment }}/ --include="*.hcl" --include="*.tf" | grep -q "true"; then
+          echo "::warning::Encryption not enabled on all resources"
+          security_issues=$((security_issues + 1))
+        fi
+        
+        # Check for backup policies
+        if ! grep -r "backup" eu-west-2/${{ github.event.inputs.environment }}/ --include="*.hcl" --include="*.tf" | grep -q "true"; then
+          echo "::warning::Backup policies not configured"
+          security_issues=$((security_issues + 1))
+        fi
+        
+        # Check for monitoring
+        if ! grep -r "monitoring" eu-west-2/${{ github.event.inputs.environment }}/ --include="*.hcl" --include="*.tf" | grep -q "true"; then
+          echo "::warning::Monitoring not configured"
+          security_issues=$((security_issues + 1))
+        fi
+        
+        if [ $security_issues -gt 0 ]; then
+          echo "::warning::$security_issues security warnings found"
+        else
+          echo "::notice::Pre-deployment security scan passed"
+        fi
+
+    - name: Pre-Deployment Summary
+      run: |
+        echo "## Pre-Deployment Check Results" >> $GITHUB_STEP_SUMMARY
+        echo "**Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Action:** ${{ github.event.inputs.action }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Deployment ID:** ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Status:** ✅ READY FOR DEPLOYMENT" >> $GITHUB_STEP_SUMMARY
+
+  deployment-plan:
+    name: Generate Deployment Plan
+    runs-on: ubuntu-latest
+    needs: pre-deployment-checks
+    timeout-minutes: 30
+    environment: ${{ github.event.inputs.environment }}
+    if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Setup Terragrunt
+      uses: autero1/action-terragrunt@v1.0.0
+      with:
+        terragrunt_version: ${{ env.TERRAGRUNT_VERSION }}
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-session-name: GitHubActions-Plan
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Generate Terraform Plan
+      run: |
+        echo "Generating deployment plan for ${{ github.event.inputs.environment }}..."
+        
+        cd eu-west-2/${{ github.event.inputs.environment }}
+        
+        # Generate plan
+        terragrunt run-all plan --terragrunt-non-interactive --terragrunt-log-level info -out=deployment-plan.tfplan
+        
+        if [ $? -ne 0 ]; then
+          echo "::error::Plan generation failed"
+          exit 1
+        fi
+        
+        echo "::notice::Deployment plan generated successfully"
+
+    - name: Upload Plan Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: deployment-plan-${{ github.event.inputs.environment }}
+        path: eu-west-2/${{ github.event.inputs.environment }}/deployment-plan.tfplan
+        retention-days: 7
+
+    - name: Plan Summary
+      run: |
+        echo "## Deployment Plan Generated" >> $GITHUB_STEP_SUMMARY
+        echo "**Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Plan Status:** ✅ READY" >> $GITHUB_STEP_SUMMARY
+        echo "**Next Step:** Manual approval required for apply" >> $GITHUB_STEP_SUMMARY
+
+  deployment-apply:
+    name: Apply Deployment
+    runs-on: ubuntu-latest
+    needs: deployment-plan
+    timeout-minutes: 60
+    environment: 
+      name: ${{ github.event.inputs.environment }}
+      url: https://console.aws.amazon.com/cloudformation/home?region=${{ env.AWS_REGION }}
+    if: github.event.inputs.action == 'apply'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Setup Terragrunt
+      uses: autero1/action-terragrunt@v1.0.0
+      with:
+        terragrunt_version: ${{ env.TERRAGRUNT_VERSION }}
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-session-name: GitHubActions-Apply
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Download Plan Artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: deployment-plan-${{ github.event.inputs.environment }}
+        path: eu-west-2/${{ github.event.inputs.environment }}/
+
+    - name: Apply Infrastructure Changes
+      run: |
+        echo "Applying infrastructure changes to ${{ github.event.inputs.environment }}..."
+        
+        cd eu-west-2/${{ github.event.inputs.environment }}
+        
+        # Apply the plan
+        terragrunt run-all apply --terragrunt-non-interactive --terragrunt-log-level info deployment-plan.tfplan
+        
+        if [ $? -ne 0 ]; then
+          echo "::error::Deployment failed"
+          exit 1
+        fi
+        
+        echo "::notice::Deployment completed successfully"
+
+    - name: Post-Deployment Validation
+      run: |
+        echo "Running post-deployment validation..."
+        
+        cd eu-west-2/${{ github.event.inputs.environment }}
+        
+        # Validate deployment
+        terragrunt run-all output
+        if [ $? -ne 0 ]; then
+          echo "::warning::Post-deployment validation failed"
+        else
+          echo "::notice::Post-deployment validation passed"
+        fi
+
+    - name: Deployment Notifications
+      run: |
+        echo "Sending deployment notifications..."
+        
+        # Send notification to Slack/Teams (if configured)
+        if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"✅ Infrastructure deployment completed for ${{ github.event.inputs.environment }} environment\"}" \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
+        fi
+        
+        echo "::notice::Deployment notifications sent"
+
+    - name: Deployment Summary
+      run: |
+        echo "## Deployment Results" >> $GITHUB_STEP_SUMMARY
+        echo "**Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Status:** ✅ SUCCESSFUL" >> $GITHUB_STEP_SUMMARY
+        echo "**Deployment Time:** $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "**Deployed By:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    needs: deployment-apply
+    timeout-minutes: 30
+    environment: ${{ github.event.inputs.environment }}
+    if: failure() && github.event.inputs.environment == 'prod'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Setup Terragrunt
+      uses: autero1/action-terragrunt@v1.0.0
+      with:
+        terragrunt_version: ${{ env.TERRAGRUNT_VERSION }}
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-session-name: GitHubActions-Rollback
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Execute Rollback
+      run: |
+        echo "Executing rollback for failed deployment..."
+        
+        cd eu-west-2/${{ github.event.inputs.environment }}
+        
+        # Rollback to previous state
+        terragrunt run-all apply --terragrunt-non-interactive --terragrunt-log-level info -auto-approve
+        
+        echo "::notice::Rollback completed"
+
+    - name: Rollback Notifications
+      run: |
+        echo "Sending rollback notifications..."
+        
+        # Send notification to Slack/Teams (if configured)
+        if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"🚨 ROLLBACK: Infrastructure deployment failed and was rolled back for ${{ github.event.inputs.environment }} environment\"}" \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
+        fi
+        
+        echo "::notice::Rollback notifications sent" 

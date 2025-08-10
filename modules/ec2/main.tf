@@ -1,3 +1,9 @@
+/**
+ * EC2 instance module with security hardening
+ * Creates single instance with encrypted storage and IMDSv2 enforcement
+ * Security group allows HTTPS inbound only - no SSH access
+ */
+
 locals {
   enabled = true
 }
@@ -18,7 +24,7 @@ resource "aws_instance" "this" {
   }
 
   metadata_options {
-    http_tokens = "required"  # IMDSv2
+    http_tokens = "required"  # Force IMDSv2 to prevent SSRF attacks
   }
 
   tags = merge(
@@ -36,7 +42,7 @@ resource "aws_security_group" "this" {
   name_prefix = "${var.environment}-ec2-sg"
   vpc_id      = var.vpc_id
   
-  # Implement least privilege access
+  # HTTPS access for application traffic
   ingress {
     from_port   = 443
     to_port     = 443
@@ -45,6 +51,7 @@ resource "aws_security_group" "this" {
     description = "HTTPS from anywhere"
   }
 
+  # All outbound allowed for package updates and API calls
   egress {
     from_port   = 0
     to_port     = 0
@@ -68,6 +75,6 @@ data "aws_ami" "amazon_linux_2" {
 
   filter {
     name   = "name"
-    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+    values = ["amzn2-ami-hvm-*-x86_64-gp2"] # TODO: Migrate to AL2023 when application is tested
   }
 }

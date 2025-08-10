@@ -1,20 +1,41 @@
 # AWS Infrastructure with Terragrunt
 
-This repository contains Infrastructure as Code (IaC) using Terragrunt for managing AWS resources following enterprise-grade best practices, including SOC2 and PCI-DSS compliance requirements.
+Infrastructure deployment using Terragrunt for multi-environment AWS resources. Implements SOC2 and PCI-DSS compliance controls required for financial services workloads with comprehensive security validation and automated CI/CD pipelines.
 
-## 🎯 Key Features
+## Features
 
-- **Multi-Environment Support**: Separate configurations for development, staging, and production
-- **Security-First Design**: Built-in compliance with SOC2 and PCI-DSS requirements
-- **Infrastructure as Code**: Version-controlled infrastructure using Terragrunt and Terraform
-- **Modular Architecture**: Reusable components across environments
-- **Automated Compliance**: Built-in security controls and monitoring
-- **Cost Optimization**: Environment-specific resource sizing
-- **High Availability**: Multi-AZ deployments for production workloads
-- **Disaster Recovery**: Automated backups and cross-region replication
-- **Infrastructure Testing**: Built-in test suite for infrastructure validation
+- Multi-environment configurations (dev, staging, production)
+- SOC2 and PCI-DSS compliance controls
+- Environment-specific resource sizing to control costs
+- Multi-AZ deployments for production reliability
+- Cross-region backup replication
+- Infrastructure validation test suite
+- Automated security scanning and compliance validation
+- GitHub Actions CI/CD pipelines with security controls
+- Comprehensive monitoring and alerting
 
-## 🗺️ Resource Map
+## Security Features
+
+### Automated Security Validation
+- **Pre-deployment security scanning** with tfsec and checkov
+- **Compliance validation** against SOC2 and PCI-DSS standards
+- **Vulnerability scanning** with trivy
+- **Cost estimation** and budget compliance monitoring
+- **Configuration validation** for security best practices
+
+### GitHub Actions Workflows
+- **security-scan.yml**: Automated security scanning on pull requests
+- **validate.yml**: Infrastructure validation and testing
+- **deploy.yml**: Secure deployment with environment protection
+- **compliance.yml**: Compliance validation and reporting
+- **security-config.yml**: Security configuration and policies
+
+### Compliance Frameworks
+- **SOC2 Type II**: Complete control environment compliance
+- **PCI-DSS Level 1**: Payment card industry security standards
+- **Automated compliance reporting** and validation
+
+## Resource Map
 
 ```mermaid
 graph TB
@@ -75,12 +96,24 @@ graph TB
         BACKUP --> EBS
     end
 
+    subgraph CI_CD[CI/CD & Security]
+        GH[GitHub Actions]
+        SEC[Security Scanning]
+        COMP[Compliance Validation]
+        DEPLOY[Secure Deployment]
+        
+        GH --> SEC
+        GH --> COMP
+        GH --> DEPLOY
+    end
+
     DEV --> Network
     STAGING --> Network
     PROD --> Network
+    CI_CD --> Security
 ```
 
-## 📊 Environment Configuration Matrix
+## Environment Configuration
 
 | Component | Development | Staging | Production |
 |-----------|------------|----------|------------|
@@ -101,186 +134,192 @@ graph TB
 | Performance Insights | 7 days | 14 days | 731 days |
 | **Storage** |
 | S3 Versioning | Enabled | Enabled | Enabled |
-| S3 Lifecycle Rules | 30 days | 60 days | 90 days |
-| S3 Replication | No | No | Yes |
+| S3 Encryption | SSE-S3 | SSE-KMS | SSE-KMS |
 | **Security** |
-| KMS Key Rotation | 365 days | 365 days | 90 days |
-| IAM Role Review | 90 days | 60 days | 30 days |
-| CloudWatch Retention | 30 days | 90 days | 365 days |
-| Backup Frequency | Daily | 12 hours | 6 hours |
+| Security Scanning | Basic | Enhanced | Full |
+| Compliance Validation | SOC2 | SOC2 + PCI-DSS | SOC2 + PCI-DSS |
+| Monitoring | Basic | Enhanced | Comprehensive |
 
-## 📁 Project Structure
+## Directory Structure
 
 ```
 terraform-katherine/
-├── account.hcl                # Account-level configurations
-├── env.hcl                    # Environment variables
-├── region.hcl                 # Region-specific settings
-├── terragrunt.hcl            # Root Terragrunt configuration
-└── eu-west-2/                # Resources for eu-west-2 region
-    ├── root.hcl              # Region-specific root configuration
-    ├── _envcommon/           # Common environment configurations
-    ├── network/              # Network resources
-    │   ├── vpc/             # VPC configurations
-    │   │   └── terragrunt.hcl
-    │   └── security_groups/ # Security group configurations
-    │       └── terragrunt.hcl
-    ├── database/            # Database resources
-    │   └── rds/            # RDS configurations
-    │       └── terragrunt.hcl
-    ├── compute/            # Compute resources
-    │   └── ec2/           # EC2 configurations
-    │       └── terragrunt.hcl
-    └── storage/           # Storage resources
-        └── s3/           # S3 configurations
-            └── terragrunt.hcl
+├── _envcommon/
+│   └── common.hcl              # Common environment configuration
+├── .github/
+│   └── workflows/              # GitHub Actions CI/CD pipelines
+│       ├── security-scan.yml   # Security scanning workflow
+│       ├── validate.yml        # Infrastructure validation
+│       ├── deploy.yml          # Secure deployment
+│       ├── compliance.yml      # Compliance validation
+│       ├── security-config.yml # Security configuration
+│       ├── terraform.yml       # Basic Terraform workflow
+│       └── README.md           # Workflow documentation
+├── modules/
+│   └── ec2/                    # EC2 module
+│       ├── main.tf
+│       ├── variables.tf
+│       ├── outputs.tf
+│       └── versions.tf
+├── dev/
+│   └── eu-west-2/              # Development environment
+│       ├── env.hcl
+│       ├── terragrunt.hcl
+│       ├── network/            # VPC, subnets, routing
+│       ├── security/           # Security groups, IAM
+│       ├── storage/            # S3 buckets
+│       ├── database/           # RDS instances
+│       └── compute/            # EC2 instances
+├── staging/
+│   └── eu-west-2/              # Staging environment
+│       ├── env.hcl
+│       ├── terragrunt.hcl
+│       ├── network/
+│       ├── security/
+│       ├── storage/
+│       ├── database/
+│       └── compute/
+├── prod/
+│   └── eu-west-2/              # Production environment
+│       ├── env.hcl
+│       ├── terragrunt.hcl
+│       ├── network/
+│       ├── security/
+│       ├── storage/
+│       ├── database/
+│       └── compute/
+├── test/
+│   └── infrastructure_test.go  # Infrastructure tests
+├── account.hcl                 # Account-level configuration
+├── region.hcl                  # Region-level configuration
+├── env.hcl                     # Environment-level configuration
+├── terragrunt.hcl              # Root Terragrunt configuration
+├── SECURITY_CONFIG.md          # Security configuration guide
+└── README.md                   # This file
 ```
-
-## Prerequisites
-
-- Terraform v1.13.0
-- Terragrunt v0.84.0
-- AWS CLI configured with appropriate credentials
-- AWS Account ID exported as environment variable
-
-## Version Requirements
-
-- Terraform: 1.13.0
-- AWS Provider: 6.2.0
-- Terragrunt: 0.84.0
 
 ## Quick Start
 
-1. **Set up AWS credentials:**
-   ```powershell
+### Prerequisites
+- Terraform >= 1.0
+- Terragrunt >= 0.35
+- AWS CLI configured
+- GitHub repository with Actions enabled
+
+### Initial Setup
+1. Configure AWS credentials:
+   ```bash
    aws configure
    ```
 
-2. **Export your AWS Account ID:**
-   ```powershell
-   $env:TF_VAR_aws_account_id="your-account-id"
+2. Update configuration files:
+   - `account.hcl`: AWS account details
+   - `region.hcl`: AWS region settings
+   - `env.hcl`: Environment-specific settings
+
+3. Deploy infrastructure:
+   ```bash
+   # Development
+   cd dev/eu-west-2/network && terragrunt apply
+   cd ../security && terragrunt apply
+   cd ../storage && terragrunt apply
+   cd ../database && terragrunt apply
+   cd ../compute && terragrunt apply
+
+   # Staging
+   cd ../../staging/eu-west-2/network && terragrunt apply
+   # ... continue with other components
+
+   # Production
+   cd ../../prod/eu-west-2/network && terragrunt apply
+   # ... continue with other components
    ```
 
-3. **Deploy the infrastructure:**
-   ```powershell
-   # Deploy VPC first
-   cd eu-west-2/network/vpc
-   terragrunt init
-   terragrunt plan
-   terragrunt apply
+## Security Validation
 
-   # Deploy security groups
-   cd ../security_groups
-   terragrunt init && terragrunt apply
+### Automated Security Scanning
+The project includes comprehensive security validation through GitHub Actions:
 
-   # Continue with other components in order:
-   # - database/rds
-   # - compute/ec2
-   # - storage/s3
-   ```
+- **Security Scanning**: Runs on every pull request
+- **Compliance Validation**: Ensures SOC2 and PCI-DSS compliance
+- **Infrastructure Validation**: Validates Terraform configurations
+- **Cost Estimation**: Monitors infrastructure costs
 
-## Infrastructure Components
+### Manual Security Validation
+```bash
+# Run security scans locally
+tfsec .
+checkov -f .
+trivy fs .
 
-### Network Layer
-- **VPC Module**
-  - CIDR: 10.0.0.0/16
-  - 3 Availability Zones
-  - Public, Private, and Database subnets
-  - NAT Gateway (single in dev, multi in prod)
-  - VPC Flow Logs enabled
+# Run infrastructure tests
+go test ./test/
+```
 
-### Security
-- **Security Groups**
-  - Least privilege access controls
-  - Inbound rules for HTTPS and application traffic
-  - Outbound rules restricted to necessary services
+## Monitoring and Alerting
 
-### Database
-- **RDS PostgreSQL**
-  - Encrypted storage
-  - Multi-AZ in production
-  - Automated backups
-  - Enhanced monitoring
-  - Performance insights enabled
+### CloudWatch Dashboards
+- Infrastructure overview dashboard
+- Security and compliance dashboard
+- Cost and usage dashboard
 
-### Compute
-- **EC2 Instances**
-  - Amazon Linux 2023
-  - Encrypted EBS volumes
-  - CloudWatch monitoring
-  - SSM access
-  - IAM roles with least privilege
-
-### Storage
-- **S3 Buckets**
-  - Server-side encryption (KMS)
-  - Versioning enabled
-  - Lifecycle policies
-  - Public access blocked
-  - Object locking for compliance
-
-## Security Features
-
-- Encryption at rest for all data
-- TLS for data in transit
-- VPC Flow Logs for network monitoring
-- IAM roles with least privilege
-- Security groups with minimal access
-- CloudWatch monitoring and alerts
-- AWS Systems Manager for secure access
+### Alarms
+- High CPU/memory utilization
+- Database connection limits
+- Security events
+- Compliance violations
+- Cost budget alerts
 
 ## Compliance
 
-This infrastructure implements controls for:
-- SOC2 compliance
-- PCI-DSS requirements
-- Data protection regulations
+### SOC2 Type II Controls
+- **CC1**: Control Environment
+- **CC2**: Communication and Information
+- **CC3**: Risk Assessment
+- **CC4**: Monitoring Activities
+- **CC5**: Control Activities
 
-## Cost Optimization
-
-- Resource tagging for cost allocation
-- Lifecycle policies for S3
-- Right-sized instances
-- Auto-scaling capabilities
-- Multi-AZ only in production
-
-## Monitoring and Observability
-
-- CloudWatch metrics and alarms
-- VPC Flow Logs
-- RDS Enhanced Monitoring
-- Performance Insights
-- AWS Systems Manager integration
-
-## Best Practices
-
-- Infrastructure as Code using Terragrunt
-- Remote state with encryption
-- State locking via DynamoDB
-- Modular design
-- Clear dependency management
-- Comprehensive tagging strategy
-- Security by default
-
-## Testing
-
-```bash
-cd test
-go test -v ./...
-```
-```
+### PCI-DSS Level 1 Requirements
+- **Requirement 1**: Firewall configuration
+- **Requirement 2**: Secure configuration
+- **Requirement 3**: Data encryption
+- **Requirement 4**: Transmission encryption
+- **Requirement 5**: Antivirus software
+- **Requirement 6**: Security patches
+- **Requirement 7**: Access control
+- **Requirement 8**: User identification
+- **Requirement 9**: Physical access
+- **Requirement 10**: Audit logging
+- **Requirement 11**: Vulnerability scanning
+- **Requirement 12**: Security policy
 
 ## Contributing
 
-1. Create a feature branch
-2. Make your changes
-3. Test your changes
-4. Submit a pull request
+1. Follow the established naming conventions
+2. Ensure all resources are properly tagged
+3. Include comprehensive documentation
+4. Test changes in development environment first
+5. Follow security best practices
+6. Run security validation before submitting changes
+7. Ensure compliance with security frameworks
+
+## Support
+
+### Documentation
+- [Security Configuration Guide](SECURITY_CONFIG.md)
+- [GitHub Actions Documentation](.github/workflows/README.md)
+- [Terragrunt Documentation](https://terragrunt.gruntwork.io/docs/)
+
+### Contacts
+- **Infrastructure Team**: infrastructure@company.com
+- **Security Team**: security@company.com
 
 ## License
 
-MIT
+This infrastructure code is proprietary and confidential.
 
-## Author
+---
 
-Catherine Vee (catherinevee)
+**Built with security-first approach using Terragrunt and AWS**
+
+*Last updated: $(date +'%Y-%m-%d')*

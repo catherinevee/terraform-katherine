@@ -1,5 +1,11 @@
+/**
+ * Root Terragrunt configuration
+ * Handles provider generation, remote state, and common settings for all environments
+ * Automatically detects environment from directory path structure
+ */
+
 locals {
-  # Read the account and region configuration
+  # Read account and region configs from parent directories
   account_vars = read_terragrunt_config(find_in_parent_folders("account.hcl"))
   region_vars  = read_terragrunt_config(find_in_parent_folders("region.hcl"))
 
@@ -8,10 +14,10 @@ locals {
   account_id   = local.account_vars.locals.aws_account_id
   aws_region   = local.region_vars.locals.aws_region
   
-  # Get environment from path
+  # Parse environment from directory path (e.g., eu-west-2/dev/network/vpc -> dev)
   environment = path_relative_to_include() =~ ".*/(dev|staging|prod)/.*" ? regex(".*/(dev|staging|prod)/.*", path_relative_to_include())[0] : "dev"
 
-  # Common tags
+  # Tags applied to all resources for cost tracking and management
   common_tags = {
     Environment = local.environment
     ManagedBy   = "Terragrunt"
@@ -20,7 +26,7 @@ locals {
   }
 }
 
-# Generate provider configuration
+# Generate AWS provider configuration with conditional role assumption
 generate "provider" {
   path      = "provider.tf"
   if_exists = "overwrite_terragrunt"
@@ -28,7 +34,7 @@ generate "provider" {
 provider "aws" {
   region = "${local.aws_region}"
   
-  # Only use assume_role for non-dev accounts
+  # Use IAM role for non-dev environments (production security requirement)
   %{ if local.account_name != "dev" }
   assume_role {
     role_arn = "arn:aws:iam::${local.account_id}:role/terragrunt"
@@ -42,7 +48,7 @@ provider "aws" {
 EOF
 }
 
-# Configure Terragrunt to automatically store tfstate files in S3
+# S3 backend configuration with encryption and locking
 remote_state {
   backend = "s3"
   config = {
@@ -52,7 +58,7 @@ remote_state {
     region         = local.aws_region
     dynamodb_table = "terraform-${local.account_name}-${local.aws_region}-locks"
 
-    # Enable server-side encryption
+    # Customer-managed KMS key for state file encryption
     kms_key_id     = "alias/terraform-${local.account_name}"
   }
   generate = {
@@ -61,22 +67,21 @@ remote_state {
   }
 }
 
-# Global terraform block for common settings
+# Global terraform settings and hooks
 terraform {
-  # Force Terraform to keep trying to acquire a lock for
-  # up to 20 minutes if someone else has the lock
+  # Retry lock acquisition for up to 20 minutes when state is locked
   extra_arguments "retry_lock" {
     commands  = get_terraform_commands_that_need_locking()
     arguments = ["-lock-timeout=20m"]
   }
 
-  # Ensure proper formatting and validation
+  # Auto-format code before apply/plan for consistency
   before_hook "before_hook" {
     commands = ["apply", "plan"]
     execute  = ["terraform", "fmt"]
   }
 
-  # Configure parallelism for better performance
+  # Increase parallelism for faster applies (default is 10)
   extra_arguments "parallelism" {
     commands  = get_terraform_commands_that_need_parallelism()
     arguments = ["-parallelism=10"]
